@@ -1,0 +1,30 @@
+name: Helm Bridge
+version: "1.0.0"
+slug: helm-bridge
+description: Connect your Home Assistant to Helm Smart Home Dashboard
+url: "https://github.com/Mjolnir357/Helm-by-nautilink.replit.app"
+arch:
+  - aarch64
+  - amd64
+  - armhf
+  - armv7
+  - i386
+startup: application
+boot: auto
+init: false
+homeassistant_api: true
+host_network: false
+hassio_api: true
+options:
+  cloud_url: "https://helm-by-nautilink.replit.app"
+  log_level: info
+schema:
+  cloud_url: url
+  log_level: list(debug|info|warn|error)
+ports:
+  8099/tcp: 8099
+ports_description:
+  8099/tcp: Helm Bridge local API (optional)
+map:
+  - addon_config:rw
+  - share:rw
