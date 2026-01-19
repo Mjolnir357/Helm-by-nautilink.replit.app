@@ -4036,15 +4036,6 @@ var HARestClient = class {
   async getState(entityId) {
     return this.request(`/api/states/${entityId}`);
   }
-  async getAreas() {
-    return this.request("/api/config/area_registry/list");
-  }
-  async getDevices() {
-    return this.request("/api/config/device_registry/list");
-  }
-  async getEntities() {
-    return this.request("/api/config/entity_registry/list");
-  }
   async getServices() {
     return this.request("/api/services");
   }
@@ -4077,7 +4068,7 @@ var HARestClient = class {
       manufacturer: device.manufacturer ?? null,
       model: device.model ?? null,
       areaId: device.area_id ?? null,
-      identifiers: device.identifiers,
+      identifiers: device.identifiers ?? [],
       swVersion: device.sw_version ?? null,
       hwVersion: device.hw_version ?? null,
       configurationUrl: device.configuration_url ?? null
@@ -4088,19 +4079,19 @@ var HARestClient = class {
     return {
       entityId: state.entity_id,
       domain,
-      friendlyName: state.attributes.friendly_name ?? null,
+      friendlyName: state.attributes?.friendly_name ?? null,
       deviceId: entityRegistry?.device_id ?? null,
       areaId: entityRegistry?.area_id ?? null,
       state: state.state,
-      attributes: state.attributes,
-      lastChanged: state.last_changed,
-      lastUpdated: state.last_updated
+      attributes: state.attributes ?? {},
+      lastChanged: state.last_changed ?? (/* @__PURE__ */ new Date()).toISOString(),
+      lastUpdated: state.last_updated ?? (/* @__PURE__ */ new Date()).toISOString()
     };
   }
   mapServiceToProtocol(serviceDomain) {
     return {
       domain: serviceDomain.domain,
-      services: serviceDomain.services
+      services: serviceDomain.services ?? {}
     };
   }
 };
@@ -4275,6 +4266,21 @@ var HAWebSocketClient = class extends EventEmitter {
       service,
       service_data: serviceData
     });
+  }
+  async getAreas() {
+    return this.sendCommand("config/area_registry/list");
+  }
+  async getDevices() {
+    return this.sendCommand("config/device_registry/list");
+  }
+  async getEntities() {
+    return this.sendCommand("config/entity_registry/list");
+  }
+  async getStates() {
+    return this.sendCommand("get_states");
+  }
+  async getServices() {
+    return this.sendCommand("get_services");
   }
   scheduleReconnect() {
     if (this.reconnectTimer) {
@@ -4757,11 +4763,12 @@ var HelmBridge = class {
     }
     this.state.haVersion = await this.restClient.getVersion();
     console.log(`   HA Version: ${this.state.haVersion}`);
-    const entities = await this.restClient.getEntities();
+    await this.wsClient.connect();
+    console.log("   WebSocket connected");
+    const entities = await this.wsClient.getEntities();
     entities.forEach((e) => this.entityRegistry.set(e.entity_id, e));
     console.log(`   Loaded ${entities.length} entity registry entries`);
-    await this.wsClient.connect();
-    const states = await this.restClient.getStates();
+    const states = await this.wsClient.getStates();
     this.state.entityCount = states.length;
     console.log(`   Found ${states.length} entities`);
     console.log("\u2705 Helm Bridge started successfully");
@@ -4773,8 +4780,29 @@ var HelmBridge = class {
         console.error("\u274C Failed to connect to cloud:", error);
       }
     } else {
-      console.log("\u26A0\uFE0F Bridge not paired. Use /api/bridge/pair endpoint with pairing code.");
+      const pairingCode = this.generatePairingCode();
+      console.log("");
+      console.log("\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550");
+      console.log("\u{1F511} PAIRING CODE: " + pairingCode);
+      console.log("\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550");
+      console.log("");
+      console.log("To complete setup:");
+      console.log(`1. Go to ${this.config.cloudUrl}`);
+      console.log("2. Navigate to Integrations \u2192 Home Assistant");
+      console.log('3. Click "Add Bridge" and enter the pairing code above');
+      console.log("");
+      console.log("The pairing code expires in 10 minutes.");
+      console.log("Restart the add-on to generate a new code if needed.");
+      console.log("");
     }
+  }
+  generatePairingCode() {
+    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    let code = "";
+    for (let i = 0; i < 6; i++) {
+      code += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return code;
   }
   async connectToCloud() {
     if (!this.credentialStore.isPaired()) {
@@ -4802,20 +4830,20 @@ var HelmBridge = class {
     console.log(`\u{1F4E6} Batched ${batch.length} state changes`);
     if (this.cloudClient.isConnected()) {
       const events = batch.map((e) => ({
-        entityId: e.entity_id,
-        oldState: e.old_state ? {
-          state: e.old_state.state,
-          attributes: e.old_state.attributes,
-          lastChanged: e.old_state.last_changed,
-          lastUpdated: e.old_state.last_updated
+        entityId: e.data.entity_id,
+        oldState: e.data.old_state ? {
+          state: e.data.old_state.state,
+          attributes: e.data.old_state.attributes,
+          lastChanged: e.data.old_state.last_changed,
+          lastUpdated: e.data.old_state.last_updated
         } : null,
         newState: {
-          state: e.new_state.state,
-          attributes: e.new_state.attributes,
-          lastChanged: e.new_state.last_changed,
-          lastUpdated: e.new_state.last_updated
+          state: e.data.new_state.state,
+          attributes: e.data.new_state.attributes,
+          lastChanged: e.data.new_state.last_changed,
+          lastUpdated: e.data.new_state.last_updated
         },
-        triggeredAt: (/* @__PURE__ */ new Date()).toISOString()
+        timestamp: (/* @__PURE__ */ new Date()).toISOString()
       }));
       this.cloudClient.sendStateBatch(events);
       this.cloudClient.updateStats(this.state.haVersion, this.state.entityCount, this.state.lastEventAt);
@@ -4825,35 +4853,42 @@ var HelmBridge = class {
     console.log("\u{1F4CA} Collecting full sync data...");
     try {
       const [areasRaw, devicesRaw, statesRaw, servicesRaw, entityRegistryRaw] = await Promise.all([
-        this.restClient.getAreas().catch((err) => {
+        this.wsClient.getAreas().catch((err) => {
           console.error("\u274C Failed to fetch areas:", err.message);
           return [];
         }),
-        this.restClient.getDevices().catch((err) => {
+        this.wsClient.getDevices().catch((err) => {
           console.error("\u274C Failed to fetch devices:", err.message);
           return [];
         }),
-        this.restClient.getStates().catch((err) => {
+        this.wsClient.getStates().catch((err) => {
           console.error("\u274C Failed to fetch states:", err.message);
           return [];
         }),
-        this.restClient.getServices().catch((err) => {
+        this.wsClient.getServices().catch((err) => {
           console.error("\u274C Failed to fetch services:", err.message);
-          return [];
+          return {};
         }),
-        this.restClient.getEntities().catch((err) => {
+        this.wsClient.getEntities().catch((err) => {
           console.error("\u274C Failed to fetch entity registry:", err.message);
           return [];
         })
       ]);
-      entityRegistryRaw.forEach((e) => this.entityRegistry.set(e.entity_id, e));
-      const areas = areasRaw.map((a) => this.restClient.mapAreaToProtocol(a));
-      const devices = devicesRaw.map((d) => this.restClient.mapDeviceToProtocol(d));
-      const entities = statesRaw.map((s) => {
+      const entityList = Array.isArray(entityRegistryRaw) ? entityRegistryRaw : [];
+      entityList.forEach((e) => this.entityRegistry.set(e.entity_id, e));
+      const areasList = Array.isArray(areasRaw) ? areasRaw : [];
+      const devicesList = Array.isArray(devicesRaw) ? devicesRaw : [];
+      const statesList = Array.isArray(statesRaw) ? statesRaw : [];
+      const areas = areasList.map((a) => this.restClient.mapAreaToProtocol(a));
+      const devices = devicesList.map((d) => this.restClient.mapDeviceToProtocol(d));
+      const entities = statesList.map((s) => {
         const registry = this.entityRegistry.get(s.entity_id);
         return this.restClient.mapStateToProtocol(s, registry);
       });
-      const services = servicesRaw.map((s) => this.restClient.mapServiceToProtocol(s));
+      const servicesDomainArray = Object.entries(servicesRaw).map(
+        ([domain, serviceDefs]) => ({ domain, services: serviceDefs })
+      );
+      const services = servicesDomainArray.map((s) => this.restClient.mapServiceToProtocol(s));
       console.log(`   Areas: ${areas.length}`);
       console.log(`   Devices: ${devices.length}`);
       console.log(`   Entities: ${entities.length}`);
