@@ -1,5 +1,5 @@
 name: Helm Bridge
-version: "1.1.0"
+version: "1.1.1"
 slug: helm-bridge
 description: Connect your Home Assistant to Helm Smart Home Dashboard
 url: "https://github.com/Mjolnir357/Helm-by-nautilink.replit.app"

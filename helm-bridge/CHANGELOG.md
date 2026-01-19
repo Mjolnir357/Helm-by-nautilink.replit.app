@@ -2,6 +2,19 @@
 
 All notable changes to the Helm Bridge add-on will be documented in this file.
 
+## [1.1.1] - 2026-01-19
+
+### Fixed
+- Fixed pairing code polling to stop after successful credential retrieval
+- Fixed bridge continuing to poll even after pairing completed
+- Handle "credential already claimed" response properly
+- Fixed 404 response handling when pairing code no longer exists
+
+### Improved
+- Bridge now properly connects to cloud WebSocket immediately after pairing
+- Added handling for edge cases when credentials are already claimed
+- Better error messages for pairing status checks
+
 ## [1.1.0] - 2026-01-19
 
 ### Fixed
