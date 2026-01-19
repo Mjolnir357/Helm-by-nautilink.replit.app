@@ -4802,7 +4802,30 @@ var HelmBridge = class {
         console.error("\u274C Failed to connect to cloud:", error);
       }
     } else {
-      const pairingCode = this.generatePairingCode();
+      await this.requestAndDisplayPairingCode();
+    }
+  }
+  async requestAndDisplayPairingCode() {
+    console.log("\u{1F511} Requesting pairing code from cloud...");
+    try {
+      const response = await fetch(`${this.config.cloudUrl}/api/bridge/pairing-codes`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          bridgeId: this.config.bridgeId,
+          bridgeVersion: this.config.protocolVersion,
+          haVersion: this.state.haVersion
+        })
+      });
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Failed to get pairing code: ${response.status} ${errorText}`);
+      }
+      const data = await response.json();
+      const pairingCode = data.code;
+      const expiresInMinutes = Math.floor(data.expiresInSeconds / 60);
       console.log("");
       console.log("\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550");
       console.log("\u{1F511} PAIRING CODE: " + pairingCode);
@@ -4813,18 +4836,63 @@ var HelmBridge = class {
       console.log("2. Navigate to Integrations \u2192 Home Assistant");
       console.log('3. Click "Add Bridge" and enter the pairing code above');
       console.log("");
-      console.log("The pairing code expires in 10 minutes.");
+      console.log(`The pairing code expires in ${expiresInMinutes} minutes.`);
       console.log("Restart the add-on to generate a new code if needed.");
+      console.log("");
+      this.pollForPairing(pairingCode);
+    } catch (error) {
+      console.error("\u274C Failed to get pairing code:", error);
+      console.log("");
+      console.log("\u26A0\uFE0F Could not connect to Helm Cloud to generate pairing code.");
+      console.log("Please ensure your internet connection is working and try restarting the add-on.");
       console.log("");
     }
   }
-  generatePairingCode() {
-    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-    let code = "";
-    for (let i = 0; i < 6; i++) {
-      code += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    return code;
+  async pollForPairing(pairingCode) {
+    console.log("\u{1F440} Waiting for pairing to complete...");
+    const pollInterval = 5e3;
+    const maxAttempts = 120;
+    let attempts = 0;
+    const poll = async () => {
+      attempts++;
+      try {
+        if (this.credentialStore.isPaired()) {
+          console.log("\u2705 Pairing completed! Connecting to cloud...");
+          await this.cloudClient.connect();
+          return;
+        }
+        const response = await fetch(
+          `${this.config.cloudUrl}/api/bridge/pairing-codes/${pairingCode}/status`
+        );
+        if (response.ok) {
+          const data = await response.json();
+          if (data.status === "paired" && data.bridgeCredential) {
+            console.log("\u2705 Pairing completed via cloud!");
+            this.credentialStore.save({
+              bridgeId: data.bridgeId,
+              tenantId: data.tenantId,
+              bridgeCredential: data.bridgeCredential
+            });
+            await this.cloudClient.connect();
+            return;
+          } else if (data.status === "expired") {
+            console.log("\u23F0 Pairing code expired. Restart the add-on to get a new code.");
+            return;
+          }
+        }
+        if (attempts < maxAttempts) {
+          setTimeout(poll, pollInterval);
+        } else {
+          console.log("\u23F0 Pairing code expired. Restart the add-on to get a new code.");
+        }
+      } catch (error) {
+        console.error("Error checking pairing status:", error);
+        if (attempts < maxAttempts) {
+          setTimeout(poll, pollInterval);
+        }
+      }
+    };
+    setTimeout(poll, pollInterval);
   }
   async connectToCloud() {
     if (!this.credentialStore.isPaired()) {
