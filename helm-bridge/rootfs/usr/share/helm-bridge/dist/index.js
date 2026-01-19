@@ -4125,6 +4125,9 @@ var HAWebSocketClient = class extends EventEmitter {
   getWebSocketUrl() {
     const httpUrl = this.config.haUrl;
     const wsUrl = httpUrl.replace(/^http/, "ws");
+    if (httpUrl.includes("supervisor/core") || httpUrl.includes("supervisor:80/core")) {
+      return `${wsUrl}/websocket`;
+    }
     return `${wsUrl}/api/websocket`;
   }
   async connect() {
@@ -4756,21 +4759,40 @@ var HelmBridge = class {
     console.log(`   HA URL: ${this.config.haUrl}`);
     console.log(`   Cloud URL: ${this.config.cloudUrl}`);
     console.log(`   Protocol Version: ${this.config.protocolVersion}`);
+    console.log("\u{1F4E1} Checking Home Assistant connection...");
     const haConnected = await this.restClient.checkConnection();
     if (!haConnected) {
       console.error("\u274C Cannot connect to Home Assistant");
       process.exit(1);
     }
+    console.log("\u2713 REST API connection verified");
     this.state.haVersion = await this.restClient.getVersion();
     console.log(`   HA Version: ${this.state.haVersion}`);
-    await this.wsClient.connect();
-    console.log("   WebSocket connected");
-    const entities = await this.wsClient.getEntities();
-    entities.forEach((e) => this.entityRegistry.set(e.entity_id, e));
-    console.log(`   Loaded ${entities.length} entity registry entries`);
-    const states = await this.wsClient.getStates();
-    this.state.entityCount = states.length;
-    console.log(`   Found ${states.length} entities`);
+    console.log("\u{1F50C} Connecting to WebSocket...");
+    try {
+      await this.wsClient.connect();
+      console.log("\u2713 WebSocket connected and authenticated");
+    } catch (wsError) {
+      console.error("\u274C WebSocket connection failed:", wsError);
+      throw wsError;
+    }
+    console.log("\u{1F4CB} Loading entity registry...");
+    try {
+      const entities = await this.wsClient.getEntities();
+      entities.forEach((e) => this.entityRegistry.set(e.entity_id, e));
+      console.log(`\u2713 Loaded ${entities.length} entity registry entries`);
+    } catch (entityError) {
+      console.error("\u26A0\uFE0F Failed to load entity registry:", entityError);
+    }
+    console.log("\u{1F50D} Loading entity states...");
+    try {
+      const states = await this.wsClient.getStates();
+      this.state.entityCount = states.length;
+      console.log(`\u2713 Found ${states.length} entities`);
+    } catch (statesError) {
+      console.error("\u26A0\uFE0F Failed to load states:", statesError);
+      this.state.entityCount = 0;
+    }
     console.log("\u2705 Helm Bridge started successfully");
     if (this.credentialStore.isPaired()) {
       console.log("\u{1F517} Bridge is already paired, connecting to cloud...");
