@@ -6,8 +6,9 @@ import { CloudClient } from './cloud-client';
 import { CredentialStore } from './credential-store';
 import { LocalDatabase } from './local-db';
 import { WebServer } from './web-server';
+import { diagnosticLogger } from './diagnostic-logger';
 import type { HAArea, HADevice, HAEntity, HAService } from '../../packages/protocol/src/entities';
-import type { CommandMessage } from '../../packages/protocol/src/messages';
+import type { CommandMessage, RequestLogsMessage } from '../../packages/protocol/src/messages';
 import type { StateChangedEvent } from '../../packages/protocol/src/sync';
 
 export interface BridgeState {
@@ -45,6 +46,9 @@ export class HelmBridge {
   private historyPruneTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor() {
+    diagnosticLogger.interceptConsole();
+    diagnosticLogger.logStartupDiagnostic();
+
     this.config = loadConfig();
     this.restClient = new HARestClient(this.config);
     this.wsClient = new HAWebSocketClient(this.config);
@@ -65,6 +69,18 @@ export class HelmBridge {
       startedAt: new Date(),
       reconnectCount: 0,
     };
+
+    diagnosticLogger.setStateProviders({
+      haConnected: () => this.state.haConnected,
+      cloudConnected: () => this.state.cloudConnected,
+      webServerListening: () => this.webServer?.isListening ?? false,
+      webServerPort: () => 8098,
+      entityCount: () => this.state.entityCount,
+    });
+
+    diagnosticLogger.onFlush((logs, diag) => {
+      this.cloudClient.sendDiagnosticLogs(logs, diag);
+    });
 
     this.setupEventHandlers();
     this.setupCloudEventHandlers();
@@ -125,6 +141,8 @@ export class HelmBridge {
     this.cloudClient.on('authenticated', (tenantId: string) => {
       console.log(`☁️ Authenticated with cloud, tenant: ${tenantId}`);
       this.state.cloudConnected = true;
+      diagnosticLogger.startPeriodicFlush();
+      setTimeout(() => diagnosticLogger.flush(), 5000);
     });
 
     this.cloudClient.on('disconnected', (_code: number, _reason: string) => {
@@ -146,6 +164,14 @@ export class HelmBridge {
 
     this.cloudClient.on('error', (error: Error) => {
       console.error('❌ Cloud error:', error);
+    });
+
+    this.cloudClient.on('request_logs', (message: RequestLogsMessage) => {
+      const logs = diagnosticLogger.getRecentLogs(message.maxEntries ?? 200);
+      const diagnostics = message.includeDiagnostics !== false 
+        ? diagnosticLogger.collectDiagnostics() 
+        : undefined;
+      this.cloudClient.sendDiagnosticLogs(logs, diagnostics);
     });
   }
 
@@ -593,6 +619,10 @@ export class HelmBridge {
   async stop(): Promise<void> {
     console.log('🛑 Stopping Helm Bridge...');
     
+    diagnosticLogger.stopPeriodicFlush();
+    diagnosticLogger.flush();
+    diagnosticLogger.restoreConsole();
+
     if (this.batchTimer) {
       clearTimeout(this.batchTimer);
       this.flushStateChanges();

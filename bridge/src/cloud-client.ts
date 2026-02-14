@@ -13,9 +13,14 @@ import type {
   CommandAckMessage,
   CommandResultMessage,
   CloudToBridgeMessage,
+  DiagnosticLogEntry,
+  BridgeLogsMessage,
+  RequestLogsMessage,
 } from '../../packages/protocol/src/messages';
 import type { HAArea, HADevice, HAEntity, HAService } from '../../packages/protocol/src/entities';
 import type { StateChangedEvent } from '../../packages/protocol/src/sync';
+
+import type { DiagnosticSnapshot } from './diagnostic-logger';
 
 export interface CloudClientEvents {
   connected: () => void;
@@ -24,6 +29,7 @@ export interface CloudClientEvents {
   auth_failed: (error: string) => void;
   command: (command: CommandMessage) => void;
   request_full_sync: (reason?: string) => void;
+  request_logs: (message: RequestLogsMessage) => void;
   error: (error: Error) => void;
 }
 
@@ -136,7 +142,6 @@ export class CloudClient extends EventEmitter {
         console.log('🔌 Cloud requested disconnect:', message.reason);
         this.shouldReconnect = false;
         
-        // If user disconnected from UI, clear local credentials
         if (message.reason === 'user_disconnected' || message.reason === 'user_reset') {
           console.log('🗑️ Clearing local credentials (user disconnected from cloud UI)...');
           this.credentialStore.clear();
@@ -147,6 +152,11 @@ export class CloudClient extends EventEmitter {
         }
         
         this.disconnect();
+        break;
+
+      case 'request_logs':
+        console.log('📋 Cloud requested diagnostic logs');
+        this.emit('request_logs', message as RequestLogsMessage);
         break;
 
       default:
@@ -269,6 +279,19 @@ export class CloudClient extends EventEmitter {
         events: changes,
         isOverflow: false,
       },
+    };
+    this.send(message);
+  }
+
+  sendDiagnosticLogs(logs: DiagnosticLogEntry[], diagnostics?: DiagnosticSnapshot): void {
+    if (!this.authenticated) return;
+
+    const message: BridgeLogsMessage = {
+      type: 'bridge_logs',
+      bridgeId: this.config.bridgeId,
+      sentAt: new Date().toISOString(),
+      logs,
+      ...(diagnostics ? { diagnostics } : {}),
     };
     this.send(message);
   }

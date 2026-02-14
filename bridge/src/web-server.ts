@@ -21,6 +21,7 @@ export class WebServer {
   private cachedEntities: HAEntityInfo[] = [];
   private cachedDevices: HADeviceInfo[] = [];
   private cachedAreas: HAAreaInfo[] = [];
+  private _isListening = false;
 
   constructor(config: WebServerConfig) {
     this.app = express();
@@ -432,9 +433,22 @@ export class WebServer {
     }
   }
 
+  get isListening(): boolean {
+    return this._isListening;
+  }
+
   start(): void {
-    this.app.listen(this.port, '0.0.0.0', () => {
+    const server = this.app.listen(this.port, '0.0.0.0', () => {
+      this._isListening = true;
       console.log(`🌐 Web UI available at http://localhost:${this.port}`);
+    });
+
+    server.on('error', (err: NodeJS.ErrnoException) => {
+      this._isListening = false;
+      console.error(`❌ Web server failed to start on port ${this.port}: ${err.message}`, {
+        code: err.code,
+        port: this.port,
+      });
     });
   }
 }
