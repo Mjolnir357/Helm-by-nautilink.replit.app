@@ -71,6 +71,22 @@ export class HelmBridge {
     this.setupHistoryPruning();
   }
   
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+
+  private scheduleReconnect(): void {
+    if (this.reconnectTimer) return;
+    this.reconnectTimer = setTimeout(async () => {
+      this.reconnectTimer = null;
+      console.log('🔄 Retrying Home Assistant connection...');
+      try {
+        await this.start();
+      } catch (error) {
+        console.error('❌ Reconnect attempt failed:', error);
+        this.scheduleReconnect();
+      }
+    }, 30000);
+  }
+
   private setupHistoryPruning(): void {
     this.historyPruneTimer = setInterval(() => {
       const pruned = this.localDb.pruneOldHistory(30);
@@ -217,8 +233,11 @@ export class HelmBridge {
     console.log('📡 Checking Home Assistant connection...');
     const haConnected = await this.restClient.checkConnection();
     if (!haConnected) {
-      console.error('❌ Cannot connect to Home Assistant');
-      process.exit(1);
+      console.error('❌ Cannot connect to Home Assistant REST API');
+      console.error('   The web UI will still be available for diagnostics.');
+      console.error('   Retrying connection in 30 seconds...');
+      this.scheduleReconnect();
+      return;
     }
     console.log('✓ REST API connection verified');
 
@@ -233,7 +252,10 @@ export class HelmBridge {
       console.log('✓ WebSocket connected and authenticated');
     } catch (wsError) {
       console.error('❌ WebSocket connection failed:', wsError);
-      throw wsError;
+      console.error('   The web UI will still be available for diagnostics.');
+      console.error('   Retrying connection in 30 seconds...');
+      this.scheduleReconnect();
+      return;
     }
 
     // Load entity registry for mapping via WebSocket
@@ -576,6 +598,10 @@ export class HelmBridge {
       this.flushStateChanges();
     }
     
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+    }
+    
     if (this.historyPruneTimer) {
       clearInterval(this.historyPruneTimer);
     }
@@ -644,7 +670,7 @@ process.on('SIGTERM', async () => {
 
 bridge.start().catch((error) => {
   console.error('❌ Bridge startup failed:', error);
-  process.exit(1);
+  console.error('   Web UI is still available for diagnostics.');
 });
 
 export { bridge };

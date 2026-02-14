@@ -145,7 +145,8 @@
   </div>
 
   <script>
-    const API_BASE = '/api';
+    const INGRESS_PATH = window.__INGRESS_PATH || '';
+    const API_BASE = INGRESS_PATH + '/api';
     let state = {
       loading: true,
       activeTab: 'suggestions',

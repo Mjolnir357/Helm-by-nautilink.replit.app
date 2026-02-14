@@ -354,9 +354,20 @@ export class WebServer {
 
     this.app.use(express.static(path.join(__dirname, '../public')));
 
+    const fs = require('fs');
+    const htmlPath = path.join(__dirname, '../public/index.html');
+    const htmlTemplate = fs.readFileSync(htmlPath, 'utf-8');
+
     this.app.get('*', (req, res) => {
       if (!req.path.startsWith('/api')) {
-        res.sendFile(path.join(__dirname, '../public/index.html'));
+        const rawIngress = req.get('X-Ingress-Path') || '';
+        const ingressPath = /^\/api\/hassio_ingress\/[a-zA-Z0-9_-]+$/.test(rawIngress) ? rawIngress : '';
+        const safeValue = JSON.stringify(ingressPath);
+        const html = htmlTemplate.replace(
+          'const INGRESS_PATH = window.__INGRESS_PATH || \'\';',
+          `const INGRESS_PATH = ${safeValue};`
+        );
+        res.type('html').send(html);
       }
     });
   }
