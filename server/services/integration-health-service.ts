@@ -224,7 +224,7 @@ export class IntegrationHealthService {
     };
   }
   
-  private async attemptTokenRefresh(userId: number, service: string, refreshToken: string): Promise<boolean> {
+  async attemptTokenRefresh(userId: number, service: string, refreshToken: string): Promise<boolean> {
     switch (service) {
       case 'hue':
         return await this.refreshHueToken(userId, refreshToken);

@@ -114,13 +114,9 @@ class TokenRefreshScheduler {
             console.log(`🔄 Refreshing ${serviceName} token for user ${user.id} (expires in ${Math.ceil(daysUntilExpiry)} days)`);
 
             try {
-              const healthResult = await integrationHealthService.checkAllIntegrations(user.id, true);
-              
-              const serviceStatus = healthResult.healthStatuses.find(
-                s => s.integration === serviceName
-              );
+              const refreshed = await integrationHealthService.attemptTokenRefresh(user.id, serviceName, token.refreshToken!);
 
-              if (serviceStatus?.refreshResult === 'success') {
+              if (refreshed) {
                 results.push({
                   userId: user.id,
                   service: serviceName,
