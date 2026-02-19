@@ -2,6 +2,41 @@
 
 All notable changes to the Helm Bridge add-on will be documented in this file.
 
+## [1.3.0] - 2026-02-14
+
+### Added
+- Remote diagnostic logging system for troubleshooting 502 Bad Gateway and other issues
+- DiagnosticLogger captures console output, system metrics (memory, uptime, connections), and errors
+- Logs are transmitted to Helm cloud every 30 seconds via WebSocket (immediate on errors)
+- On-demand log request support from Helm dashboard
+- Bridge Logs viewer on Integration Health page with level/category filtering and diagnostics dashboard
+
+### Improved
+- Enhanced cloud client with `sendDiagnosticLogs` method for structured log transmission
+- Added `bridge_logs` and `request_logs` message types to WebSocket protocol
+- Pre-built dist/index.js now included in repo for reliable addon Docker builds
+
+## [1.2.0] - 2026-02-01
+
+### Added
+- Local device merge system for detecting and merging duplicate devices within Home Assistant
+- SQLite database for entity groups, state history, and merge tracking
+- Fuzzy name matching, room matching, and state correlation analysis for duplicate detection
+- Pairwise bidirectional correlation with event normalization
+- Express web server with ingress-protected API endpoints for device management
+- Self-contained offline-capable web UI (no CDN dependencies)
+- API endpoints: `/api/devices`, `/api/duplicates`, `/api/groups`, `/api/refresh`
+- Group control endpoint to control all entities in a merge group simultaneously
+
+### Security
+- CORS restricted to HA-compatible origins (local network, homeassistant.local, ingress)
+- API endpoints require ingress header or HA referer (except /api/health)
+
+### Improved
+- Secure WebSocket connections (wss://) when serving over HTTPS
+- Reconnect scheduler for HA REST/WebSocket failures
+- Updated project dependencies for improved security and stability
+
 ## [1.1.1] - 2026-01-19
 
 ### Fixed
