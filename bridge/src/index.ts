@@ -4,7 +4,7 @@ import { HARestClient } from './ha-rest-client';
 import { HAWebSocketClient, HAStateChangedEvent } from './ha-ws-client';
 import { CloudClient } from './cloud-client';
 import { CredentialStore } from './credential-store';
-import { LocalDatabase } from './local-db';
+import { createLocalDatabase, type ILocalDatabase } from './local-db';
 import { WebServer } from './web-server';
 import { diagnosticLogger } from './diagnostic-logger';
 import type { HAArea, HADevice, HAEntity, HAService } from '../../packages/protocol/src/entities';
@@ -36,7 +36,7 @@ export class HelmBridge {
   private wsClient: HAWebSocketClient;
   private cloudClient: CloudClient;
   private credentialStore: CredentialStore;
-  private localDb: LocalDatabase;
+  private localDb: ILocalDatabase;
   private webServer: WebServer | null = null;
   private state: BridgeState;
   private entityRegistry: Map<string, unknown> = new Map();
@@ -56,7 +56,7 @@ export class HelmBridge {
     this.cloudClient = new CloudClient(this.config, this.credentialStore);
     
     const dataDir = process.env.DATA_DIR || '/data';
-    this.localDb = new LocalDatabase(dataDir);
+    this.localDb = createLocalDatabase(dataDir);
     
     this.state = {
       config: this.config,

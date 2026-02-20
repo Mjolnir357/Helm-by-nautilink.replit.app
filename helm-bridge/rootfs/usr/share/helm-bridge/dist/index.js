@@ -4686,18 +4686,58 @@ var CredentialStore = class {
 };
 
 // ../../home/runner/workspace/bridge/src/local-db.ts
-import Database from "better-sqlite3";
 import path2 from "path";
 import fs2 from "fs";
+var NoOpDatabase = class {
+  available = false;
+  recordStateChange() {
+  }
+  getStateHistory() {
+    return [];
+  }
+  getCorrelatedEntities() {
+    return /* @__PURE__ */ new Map();
+  }
+  getEntitiesWithSameContext() {
+    return [];
+  }
+  createEntityGroup(name, primaryEntityId, memberEntityIds) {
+    throw new Error("SQLite not available - device merge features disabled");
+  }
+  getEntityGroup() {
+    return null;
+  }
+  getAllEntityGroups() {
+    return [];
+  }
+  updateEntityGroup() {
+    return null;
+  }
+  deleteEntityGroup() {
+    return false;
+  }
+  getGroupByEntityId() {
+    return null;
+  }
+  getMergeHistory() {
+    return [];
+  }
+  pruneOldHistory() {
+    return 0;
+  }
+  close() {
+  }
+};
 var LocalDatabase = class {
   db;
   dbPath;
-  constructor(dataDir = "/data") {
+  available = true;
+  constructor(dataDir, sqliteModule) {
     if (!fs2.existsSync(dataDir)) {
       fs2.mkdirSync(dataDir, { recursive: true });
     }
     this.dbPath = path2.join(dataDir, "helm-bridge.db");
-    this.db = new Database(this.dbPath);
+    this.db = new sqliteModule(this.dbPath);
     this.db.pragma("journal_mode = WAL");
     this.initializeTables();
   }
@@ -4901,6 +4941,18 @@ var LocalDatabase = class {
     this.db.close();
   }
 };
+function createLocalDatabase(dataDir) {
+  try {
+    const Database = __require("better-sqlite3");
+    const db = new LocalDatabase(dataDir, Database);
+    console.log("\u2705 SQLite loaded - device merge features enabled");
+    return db;
+  } catch (error) {
+    console.warn("\u26A0\uFE0F better-sqlite3 not available - device merge features disabled");
+    console.warn("   Core bridge features (pairing, cloud sync, device control) will work normally.");
+    return new NoOpDatabase();
+  }
+}
 
 // ../../home/runner/workspace/bridge/src/web-server.ts
 import express, { Router } from "express";
@@ -5734,7 +5786,7 @@ var HelmBridge = class {
     this.credentialStore = new CredentialStore(this.config.credentialPath);
     this.cloudClient = new CloudClient(this.config, this.credentialStore);
     const dataDir = process.env.DATA_DIR || "/data";
-    this.localDb = new LocalDatabase(dataDir);
+    this.localDb = createLocalDatabase(dataDir);
     this.state = {
       config: this.config,
       haVersion: "unknown",

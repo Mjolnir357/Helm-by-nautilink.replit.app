@@ -1,4 +1,3 @@
-import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
 
@@ -28,17 +27,55 @@ export interface MergeHistory {
   timestamp: string;
 }
 
-export class LocalDatabase {
-  private db: Database.Database;
-  private dbPath: string;
+export interface ILocalDatabase {
+  readonly available: boolean;
+  recordStateChange(entityId: string, state: string, attributes: Record<string, unknown>, contextId: string | null): void;
+  getStateHistory(entityId: string, limit?: number): StateHistoryEntry[];
+  getCorrelatedEntities(entityId: string, windowMs?: number): Map<string, number>;
+  getEntitiesWithSameContext(limit?: number): Array<{ contextId: string; entities: string[]; count: number }>;
+  createEntityGroup(name: string, primaryEntityId: string, memberEntityIds: string[]): EntityGroup;
+  getEntityGroup(id: number): EntityGroup | null;
+  getAllEntityGroups(): EntityGroup[];
+  updateEntityGroup(id: number, updates: Partial<Pick<EntityGroup, 'name' | 'primaryEntityId' | 'memberEntityIds'>>): EntityGroup | null;
+  deleteEntityGroup(id: number): boolean;
+  getGroupByEntityId(entityId: string): EntityGroup | null;
+  getMergeHistory(limit?: number): MergeHistory[];
+  pruneOldHistory(daysToKeep?: number): number;
+  close(): void;
+}
 
-  constructor(dataDir: string = '/data') {
+class NoOpDatabase implements ILocalDatabase {
+  readonly available = false;
+
+  recordStateChange(): void {}
+  getStateHistory(): StateHistoryEntry[] { return []; }
+  getCorrelatedEntities(): Map<string, number> { return new Map(); }
+  getEntitiesWithSameContext(): Array<{ contextId: string; entities: string[]; count: number }> { return []; }
+  createEntityGroup(name: string, primaryEntityId: string, memberEntityIds: string[]): EntityGroup {
+    throw new Error('SQLite not available - device merge features disabled');
+  }
+  getEntityGroup(): EntityGroup | null { return null; }
+  getAllEntityGroups(): EntityGroup[] { return []; }
+  updateEntityGroup(): EntityGroup | null { return null; }
+  deleteEntityGroup(): boolean { return false; }
+  getGroupByEntityId(): EntityGroup | null { return null; }
+  getMergeHistory(): MergeHistory[] { return []; }
+  pruneOldHistory(): number { return 0; }
+  close(): void {}
+}
+
+export class LocalDatabase implements ILocalDatabase {
+  private db: any;
+  private dbPath: string;
+  readonly available = true;
+
+  constructor(dataDir: string, sqliteModule: any) {
     if (!fs.existsSync(dataDir)) {
       fs.mkdirSync(dataDir, { recursive: true });
     }
     
     this.dbPath = path.join(dataDir, 'helm-bridge.db');
-    this.db = new Database(this.dbPath);
+    this.db = new sqliteModule(this.dbPath);
     this.db.pragma('journal_mode = WAL');
     this.initializeTables();
   }
@@ -270,5 +307,18 @@ export class LocalDatabase {
 
   close(): void {
     this.db.close();
+  }
+}
+
+export function createLocalDatabase(dataDir: string): ILocalDatabase {
+  try {
+    const Database = require('better-sqlite3');
+    const db = new LocalDatabase(dataDir, Database);
+    console.log('✅ SQLite loaded - device merge features enabled');
+    return db;
+  } catch (error) {
+    console.warn('⚠️ better-sqlite3 not available - device merge features disabled');
+    console.warn('   Core bridge features (pairing, cloud sync, device control) will work normally.');
+    return new NoOpDatabase();
   }
 }

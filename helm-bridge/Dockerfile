@@ -1,16 +1,8 @@
 ARG BUILD_FROM
 FROM $BUILD_FROM
 
-# Install Node.js 20 and build dependencies for better-sqlite3
-# python3-dev and linux-headers needed for node-gyp native module compilation
-RUN apk add --no-cache \
-  nodejs \
-  npm \
-  python3 \
-  make \
-  g++ \
-  linux-headers \
-  && ln -sf /usr/bin/python3 /usr/bin/python
+# Install Node.js
+RUN apk add --no-cache nodejs npm
 
 # Set working directory
 WORKDIR /usr/share/helm-bridge
@@ -18,10 +10,17 @@ WORKDIR /usr/share/helm-bridge
 # Copy package.json first for layer caching
 COPY rootfs/usr/share/helm-bridge/package.json ./
 
-# Install production dependencies (including native modules)
-# Use --build-from-source to ensure better-sqlite3 compiles for this arch
-RUN npm install --only=production --build-from-source 2>&1 \
-  && npm cache clean --force
+# Install build tools, attempt native module build, then clean up build tools
+# better-sqlite3 is optional - bridge works without it (device merge disabled)
+RUN apk add --no-cache --virtual .build-deps python3 make g++ linux-headers \
+  && ln -sf /usr/bin/python3 /usr/bin/python \
+  && npm install --only=production --build-from-source 2>&1 || true \
+  && if [ ! -d "node_modules/better-sqlite3/build" ]; then \
+       echo "WARNING: better-sqlite3 failed to build, installing without it..." ; \
+       npm install --only=production --ignore-scripts 2>&1 ; \
+     fi \
+  && npm cache clean --force \
+  && apk del .build-deps
 
 # Copy bundled bridge code (single file created by build.sh)
 COPY rootfs/usr/share/helm-bridge/dist/index.js ./dist/

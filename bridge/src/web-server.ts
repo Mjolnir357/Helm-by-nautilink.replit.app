@@ -1,19 +1,19 @@
 import express, { Request, Response, Router, NextFunction } from 'express';
 import path from 'path';
-import { LocalDatabase, EntityGroup } from './local-db';
+import { type ILocalDatabase, type EntityGroup } from './local-db';
 import { DuplicateDetector, HAEntityInfo, HADeviceInfo, HAAreaInfo, DuplicateSuggestion } from './duplicate-detector';
 import { HAWebSocketClient } from './ha-ws-client';
 
 export interface WebServerConfig {
   port: number;
-  db: LocalDatabase;
+  db: ILocalDatabase;
   wsClient: HAWebSocketClient;
   ingressToken?: string;
 }
 
 export class WebServer {
   private app: express.Application;
-  private db: LocalDatabase;
+  private db: ILocalDatabase;
   private wsClient: HAWebSocketClient;
   private detector: DuplicateDetector;
   private port: number;

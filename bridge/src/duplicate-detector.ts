@@ -1,4 +1,4 @@
-import { LocalDatabase, EntityGroup } from './local-db';
+import { type ILocalDatabase, type EntityGroup } from './local-db';
 
 export interface HAEntityInfo {
   entityId: string;
@@ -32,9 +32,9 @@ export interface DuplicateSuggestion {
 }
 
 export class DuplicateDetector {
-  private db: LocalDatabase;
+  private db: ILocalDatabase;
 
-  constructor(db: LocalDatabase) {
+  constructor(db: ILocalDatabase) {
     this.db = db;
   }
 
