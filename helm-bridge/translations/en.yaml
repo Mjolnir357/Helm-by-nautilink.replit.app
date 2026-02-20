@@ -12,3 +12,7 @@ configuration:
       The logging verbosity level. Use 'debug' for troubleshooting,
       'info' for normal operation, 'warn' for warnings only, or 
       'error' for errors only.
+
+network:
+  8098/tcp: Device Manager Web UI
+  8099/tcp: Health Check API

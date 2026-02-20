@@ -84,6 +84,66 @@ Pairing codes expire after 10 minutes. Restart the add-on to generate a new code
 - You control which devices are visible in Helm through the import settings
 - The bridge only sends data when connected to your verified account
 
+## Security Hardening
+
+For enhanced security, consider implementing the following network-level protections:
+
+### Network Requirements
+
+The Helm Bridge add-on requires the following network access:
+
+| Direction | Destination | Port | Purpose |
+|-----------|-------------|------|---------|
+| Outbound | helm-by-nautilink.replit.app | 443 | Cloud connection (WSS/HTTPS) |
+| Internal | Home Assistant Core | 8123 | Local API access |
+| Inbound (Optional) | LAN | 8099 | Local API (if enabled) |
+
+### Firewall Configuration
+
+If you have strict firewall rules, ensure the following outbound connections are allowed:
+
+**Required:**
+- `helm-by-nautilink.replit.app:443` (TLS/WSS)
+- DNS resolution (port 53)
+
+**Example Router Rules (pfSense/OPNsense/UniFi):**
+```
+Allow | TCP | Home_Assistant_IP | * | helm-by-nautilink.replit.app | 443
+Allow | UDP | Home_Assistant_IP | * | DNS_Server | 53
+```
+
+### VLAN Segmentation (Recommended)
+
+For best security, place Home Assistant on a dedicated IoT VLAN:
+
+1. Create a separate VLAN for IoT/smart home devices (e.g., VLAN 20)
+2. Place your Home Assistant on this VLAN
+3. Configure inter-VLAN routing to:
+   - Allow your trusted devices to access HA UI (port 8123)
+   - Allow HA outbound to internet (ports 443, 53 only)
+   - Block IoT VLAN from initiating connections to trusted networks
+
+### Entity Access Control
+
+Use Helm's import settings to follow the principle of least privilege:
+
+1. **Import only necessary entities** - Don't expose everything
+2. **Use visibility controls**:
+   - Visible: Can see state (read-only)
+   - Controllable: Can send commands
+   - Automatable: Can use in automations
+3. **Regularly review imported entities** and remove unused ones
+
+### Security Best Practices
+
+- **Strong passwords**: Use 8+ characters with uppercase, lowercase, and numbers
+- **Separate accounts**: Create individual accounts for family members
+- **Review audit logs**: Regularly check the Helm audit log for unusual activity
+- **Keep updated**: Update the add-on when new versions are released
+- **Monitor connections**: Check bridge status regularly for unexpected disconnections
+
+For detailed network security configuration, see the main [SECURITY.md](../../SECURITY.md) documentation.
+
 ## Support
 
 - [GitHub Issues](https://github.com/Mjolnir357/Helm-by-nautilink.replit.app/issues)

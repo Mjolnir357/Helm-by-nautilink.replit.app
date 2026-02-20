@@ -2,8 +2,6 @@
 
 # Helm Bridge Add-on Startup Script
 
-set -e
-
 CONFIG_PATH=/data/options.json
 BRIDGE_DIR=/usr/share/helm-bridge
 
@@ -19,11 +17,35 @@ export CREDENTIAL_PATH="/data/credentials.json"
 export BRIDGE_ID=$(bashio::addon.hostname)
 export LOG_LEVEL="${LOG_LEVEL}"
 
-bashio::log.info "Starting Helm Bridge..."
+bashio::log.info "Starting Helm Bridge v1.3.0..."
 bashio::log.info "  Cloud URL: ${CLOUD_URL}"
 bashio::log.info "  Bridge ID: ${BRIDGE_ID}"
 bashio::log.info "  Log Level: ${LOG_LEVEL}"
+bashio::log.info "  Node.js: $(node --version 2>/dev/null || echo 'not found')"
+
+# Verify Node.js is available
+if ! command -v node &> /dev/null; then
+  bashio::log.fatal "Node.js is not installed! Cannot start bridge."
+  exit 1
+fi
+
+# Verify the bridge bundle exists
+if [ ! -f "${BRIDGE_DIR}/dist/index.js" ]; then
+  bashio::log.fatal "Bridge bundle not found at ${BRIDGE_DIR}/dist/index.js"
+  exit 1
+fi
+
+# Verify better-sqlite3 native module is built
+if [ ! -d "${BRIDGE_DIR}/node_modules/better-sqlite3" ]; then
+  bashio::log.fatal "better-sqlite3 module not found - npm install may have failed"
+  exit 1
+fi
+
+# Create data directory if needed
+mkdir -p /data
 
 # Change to bridge directory and start
 cd ${BRIDGE_DIR}
-exec node dist/index.js
+
+bashio::log.info "Launching bridge process..."
+exec node dist/index.js 2>&1
